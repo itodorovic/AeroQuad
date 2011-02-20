@@ -1,5 +1,5 @@
 /*
-  AeroQuad v2.2 - Feburary 2011
+  AeroQuad v2.1 - January 2011
   www.AeroQuad.com
   Copyright (c) 2011 Ted Carancho.  All rights reserved.
   An Open Source Arduino based multicopter.
@@ -32,53 +32,49 @@ void readPilotCommands() {
     if (receiver.getRaw(YAW) < MINCHECK && armed == ON) {
       armed = OFF;
       motors.commandAllMotors(MINCOMMAND);
-      #if defined(APM_OP_CHR6DM) || defined(ArduCopter) 
+      #if defined(APM_OP_CHR6DM) || defined(APM) 
       digitalWrite(LED_Red, LOW);
       #endif
     }    
     // Zero Gyro and Accel sensors (left stick lower left, right stick lower right corner)
     if ((receiver.getRaw(YAW) < MINCHECK) && (receiver.getRaw(ROLL) > MAXCHECK) && (receiver.getRaw(PITCH) < MINCHECK)) {
-      gyro.calibrate(); // defined in Gyro.h
+      rateGyro.calibrate(); // defined in Gyro.h
       accel.calibrate(); // defined in Accel.h
       //accel.setOneG(accel.getFlightData(ZAXIS));
-      #if defined(AeroQuadMega_CHR6DM) || defined(APM_OP_CHR6DM)
-        _flightAngle->calibrate();
-      #endif
+       #if defined(AeroQuadMega_CHR6DM) || defined(APM_OP_CHR6DM)
+      flightAngle.calibrate();
+       #endif
       zeroIntegralError();
+      #ifndef BatteryMonitor
       motors.pulseMotors(3);
-      // ledCW() is currently a private method in BatteryMonitor.h, fix and agree on this behavior in next revision
-      //#if defined(BattMonitor) && defined(ArduCopter)
-      //  ledCW(); ledCW(); ledCW();
-      //#endif
-      #ifdef ArduCopter
-        zero_ArduCopter_ADC();
       #endif
+      #ifdef BatteryMonitor
+      ledCW(); ledCW(); ledCW();
+      #endif     
+      rateGyro.zero();
+      accel.zero();
     }   
-    #ifdef Multipilot
     // Multipilot Zero Gyro sensors (left stick no throttle, right stick upper right corner)
     if ((receiver.getRaw(ROLL) > MAXCHECK) && (receiver.getRaw(PITCH) > MAXCHECK)) {
       accel.calibrate(); // defined in Accel.h
       zeroIntegralError();
       motors.pulseMotors(3);
-      #ifdef ArduCopter
-        zero_ArduCopter_ADC();
-      #endif
+      rateGyro.zero();
+      accel.zero();
     }   
     // Multipilot Zero Gyros (left stick no throttle, right stick upper left corner)
     if ((receiver.getRaw(ROLL) < MINCHECK) && (receiver.getRaw(PITCH) > MAXCHECK)) {
-      gyro.calibrate();
+      rateGyro.calibrate();
       zeroIntegralError();
       motors.pulseMotors(4);
-      #ifdef ArduCopter
-        zero_ArduCopter_ADC();
-      #endif
+      rateGyro.zero();
+      accel.zero();
     }
-    #endif
     // Arm motors (left stick lower right corner)
     if (receiver.getRaw(YAW) > MAXCHECK && armed == OFF && safetyCheck == ON) {
       zeroIntegralError();
       armed = ON;
-      #if defined(APM_OP_CHR6DM) || defined(ArduCopter) 
+      #if defined(APM_OP_CHR6DM) || defined(APM) 
       digitalWrite(LED_Red, HIGH);
       #endif
       for (byte motor = FRONT; motor < LASTMOTOR; motor++)
@@ -99,21 +95,21 @@ void readPilotCommands() {
   
   // Check Mode switch for Acro or Stable
   if (receiver.getRaw(MODE) > 1500) {
-    #if defined(AeroQuad_v18) || defined(AeroQuadMega_v2)
+    #if defined(AEROQUAD_V18) || defined(AEROQUAD_MEGA_V2)
       if (flightMode == ACRO)
-        digitalWrite(LED2PIN, HIGH);
+        digitalWrite(LED2_PIN, HIGH);
     #endif
     flightMode = STABLE;
  }
   else {
-    #if defined(AeroQuad_v18) || defined(AeroQuadMega_v2)
+    #if defined(AEROQUAD_V18) || defined(AEROQUAD_MEGA_V2)
       if (flightMode == STABLE)
-        digitalWrite(LED2PIN, LOW);
+        digitalWrite(LED2_PIN, LOW);
     #endif
     flightMode = ACRO;
   }
   
-   #if defined(APM_OP_CHR6DM) || defined(ArduCopter) 
+   #if defined(APM_OP_CHR6DM) || defined(APM) 
       if (flightMode == ACRO) {
         digitalWrite(LED_Yellow, HIGH);
         digitalWrite(LED_Green, LOW);

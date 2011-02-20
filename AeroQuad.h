@@ -1,5 +1,5 @@
 /*
-  AeroQuad v2.2 - Feburary 2011
+  AeroQuad v2.1 - January 2011
   www.AeroQuad.com
   Copyright (c) 2011 Ted Carancho.  All rights reserved.
   An Open Source Arduino based multicopter.
@@ -24,32 +24,70 @@
 #include "pins_arduino.h"
 
 // Flight Software Version
-#define VERSION 2.2
+#define VERSION 2.1
+
+#define DEG_2_RAD(d) (d * 0.01745329252)
+#define RAD_2_DEG(r) (r * 57.2957795131)
+
+#define G_2_MPS2(g) (g * 9.80665)
+#define MPS2_2_G(m) (m * 0.10197162)
 
 #define BAUD 115200
-//#define BAUD 111111
 //#define BAUD 57600
-#define LEDPIN 13
+#define LED_PIN 13
 #define ON 1
 #define OFF 0
 
-#if defined(APM_OP_CHR6DM) || defined(ArduCopter) 
-  #define LED_Red 35
-  #define LED_Yellow 36
-  #define LED_Green 37
-  #define RELE_pin 47
-  #define SW1_pin 41
-  #define SW2_pin 40
-  #define BUZZER 9
-  #define PIANO_SW1 42
-  #define PIANO_SW2 43
+#if defined(APM_OP_CHR6DM) || defined(APM) 
+  #define LED_Red       35
+  #define LED_Yellow    36
+  #define LED_Green     37
+  #define RELE_pin      47
+  #define SW1_pin       41
+  #define SW2_pin       40
+  #define BUZZER         9
+  #define PIANO_SW1     42
+  #define PIANO_SW2     43
 #endif
-#ifdef AeroQuadMega_v2  
-  #define LED2PIN 4
-  #define LED3PIN 31
+
+#ifdef AEROQUAD_MEGA_V2  
+  #define LED2_PIN       4
+  #define LED3_PIN      31
+  
+  #define LED1_GND_PIN  43
+  #define LED2_GND_PIN  44
+  #define LED3_GND_PIN  45
+  #define LED4_GND_PIN  46
+  #define LED5_GND_PIN  47
+  #define LED6_GND_PIN  48
+  #define LED7_GND_PIN  49
+  
+  #define SERVO1_PIN    33
+  #define SERVO2_PIN    34
+  #define SERVO3_PIN    35
+  #define SERVO4_PIN    36
+  #define SERVO5_PIN    37
+  #define SERVO6_PIN    38
+  #define SERVO7_PIN    39
+  #define SERVO8_PIN    40
+  #define SERVO9_PIN    41
+  #define SERVO10_PIN   42
+  
+  #define PWM_ESC1_PIN   2
+  #define PWM_ESC2_PIN   3
+  #define PWM_ESC3_PIN   5
+  #define PWM_ESC4_PIN   6
+  #define PWM_ESC5_PIN   7
+  #define PWM_ESC6_PIN   8
+  #define PWM_ESC7_PIN   9
+  #define PWM_ESC8_PIN  10
+  #define PWM_ESC9_PIN  11
+  #define PWM_ESC10_PIN 12
+  
+  #define BMP085_EOC    30  // jihlein: Modification to AeroQuad shield to match APM hardware
 #else
-  #define LED2PIN 12
-  #define LED3PIN 12
+  #define LED2_PIN 12
+  #define LED3_PIN 12
 #endif
 
 // Basic axis definitions
@@ -246,12 +284,12 @@ unsigned long telemetryTime = 50000; // make telemetry output 50ms offset from r
 /**************************************************************/
 /********************** Wireless Telem Port *******************/
 /**************************************************************/
-#if defined WirelessTelemetry && (defined(AeroQuadMega_v1)     || \
-                                  defined(AeroQuadMega_v2)     || \
-                                  defined(AeroQuadMega_Wii)    || \
-                                  defined(ArduCopter)          || \
-                                  defined(AeroQuadMega_CHR6DM) || \
-                                  defined(APM_OP_CHR6DM))
+#if defined WIRELESS_TELEMETRY_INSTALLED && (defined(AeroQuadMega_v1)     || \
+                                             defined(AEROQUAD_MEGA_V2)    || \
+                                             defined(AeroQuadMega_Wii)    || \
+                                             defined(APM)                 || \
+                                             defined(AeroQuadMega_CHR6DM) || \
+                                             defined(APM_OP_CHR6DM))
   #define SERIAL_BAUD       115200
   #define SERIAL_PRINT      Serial3.print
   #define SERIAL_PRINTLN    Serial3.println
@@ -286,79 +324,106 @@ byte testSignal = LOW;
 // *************************** EEPROM ***************************
 // **************************************************************
 // EEPROM storage addresses
-#define ROLL_PID_GAIN_ADR 0
-#define LEVELROLL_PID_GAIN_ADR 12
-#define YAW_PID_GAIN_ADR 24
-#define WINDUPGUARD_ADR 36
-#define LEVELLIMIT_ADR 40
-#define LEVELOFF_ADR 44
-#define XMITFACTOR_ADR 48
-#define GYROSMOOTH_ADR 52
-#define ACCSMOOTH_ADR 56
-#define LEVELPITCHCAL_ADR 60
-#define LEVELROLLCAL_ADR 64
-#define LEVELZCAL_ADR 68
-#define FILTERTERM_ADR 72
-#define NVM_TRANSMITTER_SCALE_OFFSET_SMOOTH 76  // needs 8 channel with 3 entries of float (4 byte) -> 96 byte
-#define PITCH_PID_GAIN_ADR 172
-#define LEVELPITCH_PID_GAIN_ADR 184
-#define HEADINGSMOOTH_ADR 200
-#define HEADING_PID_GAIN_ADR 204
-#define AREF_ADR 216
-#define FLIGHTMODE_ADR 220
-#define LEVEL_GYRO_ROLL_PID_GAIN_ADR 224
-#define LEVEL_GYRO_PITCH_PID_GAIN_ADR 236
-#define HEADINGHOLD_ADR 248
-#define MINACRO_ADR 252
-#define ACCEL1G_ADR 256
-#define ALTITUDE_PGAIN_ADR 260
-#define ALTITUDE_IGAIN_ADR 264
-#define ALTITUDE_DGAIN_ADR 268
-#define ALTITUDE_MAX_THROTTLE_ADR 272
-#define ALTITUDE_MIN_THROTTLE_ADR 276
-#define ALTITUDE_SMOOTH_ADR 280
-#define ZDAMP_PGAIN_ADR 284
-#define ZDAMP_IGAIN_ADR 288
-#define ZDAMP_DGAIN_ADR 292
-#define ALTITUDE_WINDUP_ADR 296
-#define MAGXMAX_ADR 300
-#define MAGXMIN_ADR 304
-#define MAGYMAX_ADR 308
-#define MAGYMIN_ADR 312
-#define MAGZMAX_ADR 316
-#define MAGZMIN_ADR 320
-#define MCAMERAPITCH_ADR 324
-#define MCAMERAROLL_ADR 328
-#define MCAMERAYAW_ADR 332
-#define CENTERPITCH_ADR 336
-#define CENTERROLL_ADR 340
-#define CENTERYAW_ADR 344
-#define SERVOMINPITCH_ADR 348
-#define SERVOMINROLL_ADR 352
-#define SERVOMINYAW_ADR 356
-#define SERVOMAXPITCH_ADR 360
-#define SERVOMAXROLL_ADR 364
-#define SERVOMAXYAW_ADR 368
-#define GYRO_ROLL_ZERO_ADR 372
-#define GYRO_PITCH_ZERO_ADR 376
-#define GYRO_YAW_ZERO_ADR 380
+#define ROLL_PID_GAIN_ADR                     0
+#define LEVELROLL_PID_GAIN_ADR               12
+#define YAW_PID_GAIN_ADR                     24
+#define WINDUPGUARD_ADR                      36
+#define LEVELLIMIT_ADR                       40
+#define LEVELOFF_ADR                         44
+#define XMITFACTOR_ADR                       48
+#define GYROSMOOTH_ADR                       52
+#define ACCSMOOTH_ADR                        56
+#define LEVELPITCHCAL_ADR                    60
+#define LEVELROLLCAL_ADR                     64
+#define LEVELZCAL_ADR                        68
+#define FILTERTERM_ADR                       72
+#define NVM_TRANSMITTER_SCALE_OFFSET_SMOOTH  76  //  needs 8 channel with 3 entries of float (4 byte) -> 96 byte
+#define PITCH_PID_GAIN_ADR                  172
+#define LEVELPITCH_PID_GAIN_ADR             184
+#define HEADINGSMOOTH_ADR                   200
+#define HEADING_PID_GAIN_ADR                204
+#define AREF_ADR                            216
+#define FLIGHTMODE_ADR                      220
+#define LEVEL_GYRO_ROLL_PID_GAIN_ADR        224
+#define LEVEL_GYRO_PITCH_PID_GAIN_ADR       236
+#define HEADINGHOLD_ADR                     248
+#define MINACRO_ADR                         252
+#define ACCEL1G_ADR                         256
+#define ALTITUDE_PGAIN_ADR                  260
+#define ALTITUDE_IGAIN_ADR                  264
+#define ALTITUDE_DGAIN_ADR                  268
+#define ALTITUDE_MAX_THROTTLE_ADR           272
+#define ALTITUDE_MIN_THROTTLE_ADR           276
+#define ALTITUDE_SMOOTH_ADR                 280
+#define ZDAMP_PGAIN_ADR                     284
+#define ZDAMP_IGAIN_ADR                     288
+#define ZDAMP_DGAIN_ADR                     292
+#define ALTITUDE_WINDUP_ADR                 296
+#define MAGXMAX_ADR                         300
+#define MAGXMIN_ADR                         304
+#define MAGYMAX_ADR                         308
+#define MAGYMIN_ADR                         312
+#define MAGZMAX_ADR                         316
+#define MAGZMIN_ADR                         320
+#define MCAMERAPITCH_ADR                    324
+#define MCAMERAROLL_ADR                     328
+#define MCAMERAYAW_ADR                      332
+#define CENTERPITCH_ADR                     336
+#define CENTERROLL_ADR                      340
+#define CENTERYAW_ADR                       344
+#define SERVOMINPITCH_ADR                   348
+#define SERVOMINROLL_ADR                    352
+#define SERVOMINYAW_ADR                     356
+#define SERVOMAXPITCH_ADR                   360
+#define SERVOMAXROLL_ADR                    364
+#define SERVOMAXYAW_ADR                     368
+#define GYRO_ROLL_ZERO_ADR                  372
+#define GYRO_PITCH_ZERO_ADR                 376
+#define GYRO_YAW_ZERO_ADR                   380
 
-float arctan2(float y, float x); // defined in Sensors.pde
-float readFloat(int address); // defined in DataStorage.h
-void writeFloat(float value, int address); // defined in DataStorage.h
-void readEEPROM(void); // defined in DataStorage.h
-void readPilotCommands(void); // defined in FlightCommand.pde
-void readSensors(void); // defined in Sensors.pde
-//void calibrateESC(void); // defined in FlightControl.pde
-void processFlightControlXMode(void); // defined in FlightControl.pde
-void processFlightControlPlusMode(void); // defined in FlightControl.pde
-void processArdupirateSuperStableMode(void);  // defined in FlightControl.pde
-void processAeroQuadStableMode(void);  // defined in FlightControl.pde
-void readSerialCommand(void);  //defined in SerialCom.pde
-void sendSerialTelemetry(void); // defined in SerialCom.pde
-void printInt(int data); // defined in SerialCom.pde
-float readFloatSerial(void); // defined in SerialCom.pde
-void comma(void); // defined in SerialCom.pde
+float readFloat(int address);                                                                                    // defined in DataStorage.h
+void  writeFloat(float value, int address);                                                                      // defined in DataStorage.h
+void  readEEPROM(void);                                                                                          // defined in DataStorage.h
+
+void  readPilotCommands(void);                                                                                   // defined in FlightCommand.pde
+
+void  flightControl(void);                                                                                       // defined in FlightControl.pde
+
+int   readApmADC(unsigned char ch_num);                                                                          // defined in ApmAdc.h
+
+float smooth(float currentData, float previousData, float smoothFactor);                                         // defined in Filter.h
+
+void  updateRegisterI2C(int deviceAddress, byte dataAddress, byte dataValue);                                    // defined in I2C.h
+void  sendByteI2C(int deviceAddress, byte dataValue);                                                            // defined in I2C.h
+byte  readByteI2C(int deviceAddress);                                                                            // defined in I2C.h
+int   readWordI2C(int deviceAddress);                                                                            // defined in I2C.h
+int   readWordWaitI2C(int deviceAddress);                                                                        // defined in I2C.h
+int   readReverseWordI2C(int deviceAddress);                                                                     // defined in I2C.h
+byte  readWhoI2C(int deviceAddress);                                                                             // defined in I2C.h
+
+void  matrixMultiply(int aRows, int aCols_bRows, int bCols, float matrixC[], float matrixA[], float matrixB[]);  // defined in Matrix.pde
+void  matrixAdd(int rows, int cols, float matrixC[], float matrixA[], float matrixB[]);                          // defined in Matrix.pde
+void  matrixSubtract(int rows, int cols, float matrixC[], float matrixA[], float matrixB[]);                     // defined in Matrix.pde
+void  matrixScale(int rows, int cols, float matrixC[], float scaler, float matrixA[]);                           // defined in Matrix.pde
+void  matrixTranspose3x3(float matrixC[9], float matrixA[9]);                                                    // defined in Matrix.pde
+void  matrixInverse3x3(float matrixC[9], float matrixA[9]);                                                      // defined in Matrix.pde
+
+void  readWii(int readWithZeroBias);                                                                             // defined in ReadWii.pde
+
+void  readSensors(void);                                                                                         // defined in Sensors.pde
+float arctan2(float y, float x);                                                                                 // defined in Sensors.pde
+
+void  readSerialCommand(void);                                                                                   // defined in SerialCom.pde
+void  sendSerialTelemetry(void);                                                                                 // defined in SerialCom.pde
+void  printInt(int data);                                                                                        // defined in SerialCom.pde
+float readFloatSerial(void);                                                                                     // defined in SerialCom.pde
+void  comma(void);                                                                                               // defined in SerialCom.pde
+
+float vectorDotProduct(int length, float vector1[], float vector2[]);                                            // defined in Vector.pde
+void  vectorCrossProduct(float vectorC[3], float vectorA[3], float vectorB[3]);                                  // defined in Vector.pde
+void  vectorScale(int length, float scaledVector[], float inputVector[], float scalar);                          // defined in Vector.pde
+void  vectorAdd(int length, float vectorC[], float vectorA[], float vectorB[]);                                  // defined in Vector.pde
+void  vectorSubtract(int length, float vectorC[], float vectorA[], float vectorB[]);                             // defined in Vector.pde
 
 #if defined(AeroQuadMega_CHR6DM) || defined(APM_OP_CHR6DM)
 float findMode(float *data, int arraySize); // defined in Sensors.pde
@@ -377,4 +442,3 @@ int freemem(){
         free_memory = ((int)&free_memory) - ((int)__brkval);
     return free_memory;
 }
-

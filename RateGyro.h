@@ -24,41 +24,31 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class Accel {
+class RateGyro {
 public:
-  float accelOneG;
-  float accelScaleFactor;
-  float accelVector[3];
+  float gyroScaleFactor;
   float smoothFactor;
-  int   accelZero[3];
-  int   accelRaw[3];
+  float gyroVector[3];
+  int   gyroZero[3];
+  int   gyroRaw[3];
   
-  Accel(void) {
-    accelOneG        = readFloat(ACCEL1G_ADR);
-    accelZero[XAXIS] = readFloat(LEVELPITCHCAL_ADR);
-    accelZero[YAXIS] = readFloat(LEVELROLLCAL_ADR);
-    accelZero[ZAXIS] = readFloat(LEVELZCAL_ADR);
-    smoothFactor     = readFloat(ACCSMOOTH_ADR);
-  }
-
-  const float getData(byte axis) {
-    return accelVector[axis];
+  RateGyro(void){
+    gyroZero[ROLL]  = readFloat(GYRO_ROLL_ZERO_ADR);
+    gyroZero[PITCH] = readFloat(GYRO_PITCH_ZERO_ADR);
+    gyroZero[YAW]   = readFloat(GYRO_YAW_ZERO_ADR);
+    smoothFactor    = readFloat(GYROSMOOTH_ADR);
   }
   
-  const float getSmoothFactor() {
+  const float getNonDriftCorrectedRate(byte axis) {
+    return gyroVector[axis];
+  }
+  
+  const float getSmoothFactor(void) {
     return smoothFactor;
   }
   
   void setSmoothFactor(float value) {
     smoothFactor = value;
-  }
-  
-  void setOneG(float value) {
-    accelOneG = value;
-  }
-  
-  const float getOneG(void) {
-    return accelOneG;
   }
 };
 
@@ -69,102 +59,79 @@ public:
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
-// AeroQuad Mega v2.0 Accelerometer (BMA180)
+// AeroQuad Mega v2.0 Gyro (ITG-3200)
 ////////////////////////////////////////////////////////////////////////////////
 
-class Accel_AeroQuadMega_v2 : public Accel {
+class RateGyro_AeroQuadMega_v2 : public RateGyro {
 private:
   
 public:
-  Accel_AeroQuadMega_v2() : Accel(){
-    accelScaleFactor = G_2_MPS2(1.0/4096.0);  //  g per LSB @ +/- 2g range
+  RateGyro_AeroQuadMega_v2() : RateGyro() {
+    gyroScaleFactor = DEG_2_RAD(1.0 / 14.375);  //  ITG3200 14.375 LSBs per °/sec
   }
   
 ////////////////////////////////////////////////////////////////////////////////
-// Initialize AeroQuad v2.0 Accelerometer
+// Initialize AeroQuad v2.0 Gyro
 ////////////////////////////////////////////////////////////////////////////////
 
   void initialize(void) {
-    byte data;
-
-    updateRegisterI2C(0x40, 0x10, 0xB6);         // reset device
-    delay(10);                                   // sleep 10 ms after reset (page 25)
-
-    updateRegisterI2C(0x40, 0x0D, 0x10);         // enable writing to control registers
-    sendByteI2C(0x40, 0x20);                     // register bw_tcs (bits 4-7)
-    data = readByteI2C(0x40);                    // get current register value
-    updateRegisterI2C(0x40, 0x20, data & 0x0F);  // set low pass filter to 10Hz (value = 0000xxxx)
-
-    sendByteI2C(0x40, 0x35);                     // Register offset_lsb1 (bits 1-3)
-    data = readByteI2C(0x40);
-    data &= 0xF1;                                // Clear range select bits
-    data |= 0x04;                                // Set range select bits for +/-2g
-    updateRegisterI2C(0x40, 0x35, data);         // (value = xxxx010x)
+    updateRegisterI2C(0x69, 0x3E, 0x80); // send a reset to the device
+    updateRegisterI2C(0x69, 0x16, 0x1D); // 10Hz low pass filter
+    updateRegisterI2C(0x69, 0x3E, 0x01); // use internal oscillator 
   }
   
 ////////////////////////////////////////////////////////////////////////////////
-// Measure AeroQuad v2.0 Accelerometer
+// Measure AeroQuad v2.0 Gyro
 ////////////////////////////////////////////////////////////////////////////////
 
   void measure(void) {
-
-    Wire.beginTransmission(0x40);
-    Wire.send(0x02);
-    Wire.endTransmission();
-    Wire.requestFrom(0x40, 6);
-
-    // The following 3 lines read the accelerometer and assign it's data to accelVectorBits
+    sendByteI2C(0x69, 0x1D);
+    Wire.requestFrom(0x69, 6);
+    
+    // The following 3 lines read the gyro and assign it's data to gyroRaw
     // in the correct order and phase to suit the standard shield installation
     // orientation.  See TBD for details.  If your shield is not installed in this
     // orientation, this is where you make the changes.
-    accelRaw[XAXIS] = ((Wire.receive()|(Wire.receive() << 8)) >> 2) - accelZero[XAXIS];
-    accelRaw[YAXIS] = accelZero[YAXIS] - ((Wire.receive()|(Wire.receive() << 8)) >> 2);
-    accelRaw[ZAXIS] = accelZero[ZAXIS] - ((Wire.receive()|(Wire.receive() << 8)) >> 2);
+    gyroRaw[ROLL]  = ((Wire.receive() << 8) | Wire.receive())  - gyroZero[ROLL];
+    gyroRaw[PITCH] = gyroZero[PITCH] - ((Wire.receive() << 8) | Wire.receive());
+    gyroRaw[YAW]   = gyroZero[YAW]   - ((Wire.receive() << 8) | Wire.receive());
 
-    for (byte axis = XAXIS; axis < LASTAXIS; axis++)
-      accelVector[axis] = smooth(accelRaw[axis] * accelScaleFactor, accelVector[axis], smoothFactor);
-  }
-
-////////////////////////////////////////////////////////////////////////////////
-// Calibrate AeroQuad v2.0 Accelerometer
-////////////////////////////////////////////////////////////////////////////////
-
-  void calibrate(void) {  
-    int findZero[FINDZERO];
-    int dataAddress;
-    
-    for (byte calAxis = XAXIS; calAxis < ZAXIS; calAxis++) {
-      if (calAxis == XAXIS) dataAddress = 0x02;
-      if (calAxis == YAXIS) dataAddress = 0x04;
-      if (calAxis == ZAXIS) dataAddress = 0x06;
-      for (int i=0; i<FINDZERO; i++) {
-        sendByteI2C(0x40, dataAddress);
-        findZero[i] = readReverseWordI2C(0x40) >> 2; // last two bits are not part of measurement
-        delay(10);
-      }
-      accelZero[calAxis] = findMode(findZero, FINDZERO);
+    for (byte axis = ROLL; axis < LASTAXIS; axis++) {
+      gyroVector[axis] = smooth(gyroRaw[axis] * gyroScaleFactor, gyroVector[axis], smoothFactor);
     }
-
-    // replace with estimated Z axis 0g value
-    accelZero[ZAXIS] = (accelZero[XAXIS] + accelZero[YAXIS]) / 2;
-    
-    // store accel value that represents 1g
-    measure();
-    accelOneG = -accelVector[ZAXIS];
-    
-    writeFloat(accelOneG,        ACCEL1G_ADR);
-    writeFloat(accelZero[XAXIS], LEVELPITCHCAL_ADR);
-    writeFloat(accelZero[YAXIS], LEVELROLLCAL_ADR);
-    writeFloat(accelZero[ZAXIS], LEVELZCAL_ADR);
   }
   
 ////////////////////////////////////////////////////////////////////////////////
-// Zero AeroQuad v2.0 Accelerometer
+// Calibrate AeroQuad v2.0 Gyro
+////////////////////////////////////////////////////////////////////////////////
+
+  void calibrate() {
+    autoZero();
+    writeFloat(gyroZero[ROLL],  GYRO_ROLL_ZERO_ADR);
+    writeFloat(gyroZero[PITCH], GYRO_PITCH_ZERO_ADR);
+    writeFloat(gyroZero[YAW],   GYRO_YAW_ZERO_ADR);
+  }
+  
+  void autoZero() {
+    int findZero[FINDZERO];
+    
+    for (byte calAxis = ROLL; calAxis < LASTAXIS; calAxis++) {
+      for (int i=0; i<FINDZERO; i++) {
+        sendByteI2C(0x69, (calAxis * 2) + 0x1D);
+        findZero[i] = readWordI2C(0x69);
+        delay(10);
+      }
+      gyroZero[calAxis] = findMode(findZero, FINDZERO);
+    }
+  }
+  
+////////////////////////////////////////////////////////////////////////////////
+// Zero AeroQuad v2.0 Gyro
 ////////////////////////////////////////////////////////////////////////////////
 
   void zero() {
-    // Not required for AeroQuad v2.0 Accelerometer
-  }
+    // Not required for AeroQuad 2.0 Gyro
+  }  
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -176,88 +143,84 @@ public:
 #if defined(APM)
 
 ////////////////////////////////////////////////////////////////////////////////
-// APM Accelerometer 
+//  APM Gyro
 ////////////////////////////////////////////////////////////////////////////////
 
-class Accel_APM : public Accel {
+class Gyro_APM : public RateGyro {
 private:
 
 public:
-  Accel_APM() : Accel(){
-    accelScaleFactor = G_2_MPS2((3.3/4096) / 0.330);    
+  Gyro_APM() : RateGyro() {
+    gyroScaleFactor = DEG_2_RAD((3.3/4096) / 0.002);  // IDG/IXZ500 sensitivity = 2mV/(deg/sec)
   }
   
 ////////////////////////////////////////////////////////////////////////////////
-// Initialize APM Accelerometer
+// Initialize APM Gyro
 ////////////////////////////////////////////////////////////////////////////////
 
-  void initialize(void) {
-    // No initialize procedure necessary, covered by APM gyro initialize
+void initialize(void) {
+  initializeApmADC();  // this is needed for both gyros and accels, done once in this class
   }
   
 ////////////////////////////////////////////////////////////////////////////////
-// Measure APM Accelerometer
+// Measure APM Gyro
 ////////////////////////////////////////////////////////////////////////////////
 
-  void measure(void) {
-    // The following 3 lines marked with ** read the accelerometer and assign it's 
-    // data to accelRaw in the correct order and phase to suit the standard shield 
-    // installation orientation.  See TBD for details.  If your shield is not
-    //  installed in this orientation, this is where you make the changes.
-    accelRaw[XAXIS] = readApmADC(XAXIS + 3);
-    if (accelRaw[XAXIS] > 500)
-      accelRaw[XAXIS] = accelRaw[XAXIS] - accelZero[XAXIS];  // **
-      
-    accelRaw[YAXIS] = readApmADC(YAXIS + 3);
-    if (accelRaw[YAXIS] > 500)
-      accelRaw[YAXIS] = accelZero[YAXIS] - accelRaw[YAXIS];  // **
-      
-    accelRaw[ZAXIS] = readApmADC(ZAXIS + 3);
-    if (accelRaw[ZAXIS] > 500)
-      accelRaw[ZAXIS] = accelZero[ZAXIS] - accelRaw[ZAXIS];  // **
+void measure(void) {
+  // The following 3 lines marked with ** read the gyro and assign it's data to
+  // gyroRaw in the correct order and phase to suit the standard shield installation
+  // orientation.  See TBD for details.  If your shield is not installed in this
+  // orientation, this is where you make the changes.
+  gyroRaw[ROLL]  = readApmADC(ROLL);
+  if (gyroRaw[ROLL] > 500)
+    gyroRaw[ROLL] = gyroRaw[ROLL] - gyroZero[ROLL];     // **
     
-    for (byte axis = XAXIS; axis < LASTAXIS; axis++)
-      accelVector[axis] = smooth(accelRaw[axis] * accelScaleFactor, accelVector[axis], smoothFactor);
+  gyroRaw[PITCH] = readApmADC(PITCH);
+  if (gyroRaw[PITCH] > 500)
+    gyroRaw[PITCH] = gyroZero[PITCH] - gyroRaw[PITCH];  // **
+    
+  gyroRaw[YAW] = readApmADC(YAW);
+  if (gyroRaw[YAW] > 500)
+    gyroRaw[YAW] = gyroZero[YAW] - gyroRaw[YAW];        // **
+    
+  for (byte axis = ROLL; axis < LASTAXIS; axis++) {
+    gyroVector[axis] = smooth(gyroRaw[axis] * gyroScaleFactor, gyroVector[axis], smoothFactor);
+  }  
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Calibrate APM Gyro
+////////////////////////////////////////////////////////////////////////////////
+
+  void calibrate() {
+    autoZero();
+    writeFloat(gyroZero[ROLL],  GYRO_ROLL_ZERO_ADR);
+    writeFloat(gyroZero[PITCH], GYRO_PITCH_ZERO_ADR);
+    writeFloat(gyroZero[YAW],   GYRO_YAW_ZERO_ADR);
   }
-
-////////////////////////////////////////////////////////////////////////////////
-// Calibrate APM Accelerometer
-////////////////////////////////////////////////////////////////////////////////
-
-  void calibrate(void) {
+  
+  void autoZero() {
     int findZero[FINDZERO];
     
-    for(byte calAxis = 0; calAxis < LASTAXIS; calAxis++) {
+    for (byte calAxis = ROLL; calAxis < LASTAXIS; calAxis++) {
       for (int i=0; i<FINDZERO; i++) {
-        findZero[i] = readApmADC(calAxis + 3);
+        findZero[i] = readApmADC(calAxis);
         delay(10);
       }
-      accelZero[calAxis] = findMode(findZero, FINDZERO);
+      gyroZero[calAxis] = findMode(findZero, FINDZERO);
     }
-
-    // replace with estimated Z axis 0g value
-    accelZero[ZAXIS] = (accelZero[XAXIS] + accelZero[YAXIS]) / 2;
-    
-    // store accel value that represents 1g
-    measure();
-    accelOneG = -accelVector[ZAXIS];
-
-    writeFloat(accelOneG,        ACCEL1G_ADR);
-    writeFloat(accelZero[XAXIS], LEVELPITCHCAL_ADR);
-    writeFloat(accelZero[YAXIS], LEVELROLLCAL_ADR);
-    writeFloat(accelZero[ZAXIS], LEVELZCAL_ADR);
   }
   
 ////////////////////////////////////////////////////////////////////////////////
-// Zero APM Accelerometer
+// Zero APM Gyro
 ////////////////////////////////////////////////////////////////////////////////
 
   void zero() {
-    for (byte n = 3; n < 6; n++) {
+    for (byte n = 0; n < 4; n++) {
       adc_value[n] = 0;
       adc_counter[n] = 0;
     }
-  }
+  }  
 };
 
 #endif
@@ -269,68 +232,67 @@ public:
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
-// Wii Accelerometer
+// Wii Gyro
 ////////////////////////////////////////////////////////////////////////////////
 
-class Accel_Wii : public Accel {
+class Gyro_Wii : public RateGyro {
 private:
 
 public:
-  Accel_Wii() : Accel(){
-    accelScaleFactor = 0.09165093;  // Experimentally derived to produce meters/s^2    
+  Gyro_Wii() : RateGyro(){
+    gyroScaleFactor = DEG_2_RAD(0.06201166);
   }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Initialize Wii Accelerometer
+// Initialize Wii Gyro
 ////////////////////////////////////////////////////////////////////////////////
 
-  void initialize(void) {
-    // No initialize procedure necessary, covered by Wii gyro initialize
-  };
+void initialize(void) {
+  //Init WM+ and Nunchuk
+  updateRegisterI2C(0x53, 0xFE, 0x05);
+  delay(100);
+  updateRegisterI2C(0x53, 0xF0, 0x55);
+  delay(100);
+};
 
 ////////////////////////////////////////////////////////////////////////////////
-// Measure Wii Accelerometer
+// Measure Wii Gyro
 ////////////////////////////////////////////////////////////////////////////////
 
-  void measure(void) {
-    // No measure procedure necessary, covered by Wii gyro measure
-  };
+void measure() {
+  readWii(1);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
-// Calibrate Wii Accelerometer
+// Calibrate Wii Gyro
 ////////////////////////////////////////////////////////////////////////////////
 
-  void calibrate(void) {
+  void calibrate() {
+    autoZero();
+    writeFloat(gyroZero[ROLL],  GYRO_ROLL_ZERO_ADR);
+    writeFloat(gyroZero[PITCH], GYRO_PITCH_ZERO_ADR);
+    writeFloat(gyroZero[YAW],   GYRO_YAW_ZERO_ADR);
+  }
+  
+  void autoZero() {
     int findZero[FINDZERO];
-
-    for(byte calAxis = XAXIS; calAxis < LASTAXIS; calAxis++) {
+  
+    for (byte calAxis = ROLL; calAxis < LASTAXIS; calAxis++) {
       for (int i=0; i<FINDZERO; i++) {
         readWii(0);
-        findZero[i] = accelRaw[calAxis];
+        findZero[i] = gyroRaw[calAxis];
         delay(10);
       }
-      accelZero[calAxis] = findMode(findZero, FINDZERO);
+      gyroZero[calAxis] = findMode(findZero, FINDZERO);
     }
-    
-    // replace with estimated Z axis 0g value
-    accelZero[ZAXIS] = (accelZero[XAXIS] + accelZero[YAXIS]) / 2;
-    
-    // store accel value that represents 1g
-    readWii(1);
-    accelOneG = -accelVector[ZAXIS];
-    
-    writeFloat(accelOneG,        ACCEL1G_ADR);
-    writeFloat(accelZero[XAXIS], LEVELPITCHCAL_ADR);
-    writeFloat(accelZero[YAXIS], LEVELROLLCAL_ADR);
-    writeFloat(accelZero[ZAXIS], LEVELZCAL_ADR);
   }
   
 ////////////////////////////////////////////////////////////////////////////////
-// Zero Wi Accelerometer
+// Zero Wii Gyro
 ////////////////////////////////////////////////////////////////////////////////
 
   void zero() {
-    // Not required for Wii Accelerometer
+    // Not required for Wii Gyro
   }
 };
 
@@ -339,4 +301,3 @@ public:
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-

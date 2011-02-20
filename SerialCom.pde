@@ -1,5 +1,5 @@
 /*
-  AeroQuad v2.2 - Feburary 2011
+  AeroQuad v2.1 - January 2011
   www.AeroQuad.com
   Copyright (c) 2011 Ted Carancho.  All rights reserved.
   An Open Source Arduino based multicopter.
@@ -41,7 +41,7 @@ void readSerialPID(unsigned char PIDid) {
 void readSerialCommand() {
   // Check for serial message
   if (Serial.available()) {
-    digitalWrite(LEDPIN, LOW);
+    digitalWrite(LED_PIN, LOW);
     queryType = Serial.read();
     switch (queryType) {
     case 'A': // Receive roll and pitch gyro PID
@@ -79,11 +79,11 @@ void readSerialCommand() {
 #endif
       break;
     case 'K': // Receive data filtering values
-      gyro.setSmoothFactor(readFloatSerial());
+      rateGyro.setSmoothFactor(readFloatSerial());
       accel.setSmoothFactor(readFloatSerial());
       timeConstant = readFloatSerial();
-#if defined(AeroQuad_v1) || defined(AeroQuad_v18)
-      _flightAngle->initialize();
+#if defined(AeroQuad_v1) || defined(AeroQuad_v1_IDG) || defined(AeroQuadMega_v1)
+      flightAngle.initialize();
 #endif
       break;
     case 'M': // Receive transmitter smoothing values
@@ -104,10 +104,10 @@ void readSerialCommand() {
       break;
     case 'Y': // Initialize EEPROM with default values
       initializeEEPROM(); // defined in DataStorage.h
-      gyro.calibrate();
+      rateGyro.calibrate();
       accel.calibrate();
       zeroIntegralError();
-#ifdef HeadingMagHold
+#ifdef COMPASS_INSTALLED
       compass.initialize();
 #endif
 #ifdef AltitudeHold
@@ -142,12 +142,12 @@ void readSerialCommand() {
       // spare
       break;
     case 'b': // calibrate gyros
-      gyro.calibrate();
+      rateGyro.calibrate();
       break;
     case 'c': // calibrate accels
       accel.calibrate();
 #if defined(AeroQuadMega_CHR6DM) || defined(APM_OP_CHR6DM)
-      _flightAngle->calibrate();
+      flightAngle.calibrate();
       accel.setOneG(accel.getFlightData(ZAXIS));
 #endif
       break;
@@ -155,7 +155,7 @@ void readSerialCommand() {
       aref = readFloatSerial();
       break;
     case 'f': // calibrate magnetometer
-#ifdef HeadingMagHold
+#ifdef COMPASS_INSTALLED
       compass.setMagCal(XAXIS, readFloatSerial(), readFloatSerial());
       compass.setMagCal(YAXIS, readFloatSerial(), readFloatSerial());
       compass.setMagCal(ZAXIS, readFloatSerial(), readFloatSerial());
@@ -179,7 +179,7 @@ void readSerialCommand() {
       #endif
       break;
     }
-    digitalWrite(LEDPIN, HIGH);
+    digitalWrite(LED_PIN, HIGH);
   }
 }
 
@@ -222,23 +222,11 @@ void sendSerialTelemetry() {
   update = 0;
   switch (queryType) {
   case '=': // Reserved debug command to view any variable from Serial Monitor
-    /*
-    Serial.print("HoldA: ");
-    Serial.print(holdAltitude);
-    Serial.print(" Altitude: ");
-    Serial.print(altitude.getData());
-    Serial.print(" HoldT: ");
-    Serial.print(holdThrottle);
-    Serial.print(" rxThrottle: ");
-    Serial.print(receiver.getData(THROTTLE));
-    Serial.print(" rxAUX: ");
-    Serial.print(receiver.getRaw(AUX));
-    Serial.print(" ThottleA: ");
-    Serial.print(throttleAdjust);
-    Serial.print(" Throttle: ");
-    Serial.println(throttle);
-    */
     //printFreeMemory();
+    //Serial.print(gyro.getHeading());
+    //comma();
+    //Serial.print(batteryMonitor, 2);
+    //Serial.println();
     //queryType = 'X';
     break;
   case 'B': // Send roll and pitch gyro PID values
@@ -280,14 +268,14 @@ void sendSerialTelemetry() {
     Serial.println(PID[ZDAMPENING].D);
 #else
     for(byte i=0; i<9; i++) {
-     PrintValueComma(0);
+      PrintValueComma(0);
     }
     Serial.println('0');
 #endif
     queryType = 'X';
     break;
   case 'L': // Send data filtering values
-    PrintValueComma(gyro.getSmoothFactor());
+    PrintValueComma(rateGyro.getSmoothFactor());
     PrintValueComma(accel.getSmoothFactor());
     Serial.println(timeConstant);
     // comma();
@@ -311,9 +299,10 @@ void sendSerialTelemetry() {
     Serial.println(receiver.getTransmitterOffset(AUX));
     queryType = 'X';
     break;
+    
   case 'Q': // Send sensor data
     for (byte axis = ROLL; axis < LASTAXIS; axis++) {
-      PrintValueComma(gyro.getData(axis));
+      PrintValueComma(float(RAD_2_DEG(rateGyro.getNonDriftCorrectedRate(axis))));  // jihlein: remove float(RAD_2_DEG()) when configurator is updated to accept radians as input, displayed as degrees
     }
     for (byte axis = ROLL; axis < LASTAXIS; axis++) {
       PrintValueComma(accel.getData(axis));
@@ -321,13 +310,9 @@ void sendSerialTelemetry() {
     for (byte axis = ROLL; axis < YAW; axis++) {
       PrintValueComma(levelAdjust[axis]);
     }
-    PrintValueComma(_flightAngle->getData(ROLL));
-    PrintValueComma(_flightAngle->getData(PITCH));
-    #if defined(HeadingMagHold) || defined(AeroQuadMega_CHR6DM) || defined(APM_OP_CHR6DM)
-      PrintValueComma(compass.getAbsoluteHeading());
-    #else
-      PrintValueComma(0);
-    #endif
+    PrintValueComma(float(RAD_2_DEG(kinematics.getAttitude(ROLL))));   // jihlein: remove float(RAD_2_DEG()) when configurator is updated to accept radians as input, displayed as degrees
+    PrintValueComma(float(RAD_2_DEG(kinematics.getAttitude(PITCH))));  // jihlein: remove float(RAD_2_DEG()) when configurator is updated to accept radians as input, displayed as degrees
+    PrintValueComma(float(RAD_2_DEG(kinematics.getAttitude(YAW))));    // jihlein: remove float(RAD_2_DEG()) when configurator is updated to accept radians as input, displayed as degrees
     #ifdef AltitudeHold
       PrintValueComma(altitude.getData());
     #else
@@ -341,7 +326,7 @@ void sendSerialTelemetry() {
     Serial.println();
     break;
   case 'R': // Raw magnetometer data
-#if defined(HeadingMagHold)
+#if defined(COMPASS_INSTALLED)
     PrintValueComma(compass.getRawData(XAXIS));
     PrintValueComma(compass.getRawData(YAXIS));
     Serial.println(compass.getRawData(ZAXIS));
@@ -351,10 +336,11 @@ void sendSerialTelemetry() {
     Serial.println('0');
 #endif
     break;
+    
   case 'S': // Send all flight data
     PrintValueComma(deltaTime);
     for (byte axis = ROLL; axis < LASTAXIS; axis++) {
-      PrintValueComma(gyro.getFlightData(axis));
+      PrintValueComma(float(RAD_2_DEG(kinematics.getDriftCorrectedRate(axis))));  // jihlein: remove float(RAD_2_DEG()) when configurator is updated to accept radians as input, displayed as degrees
     }
     #ifdef BattMonitor
       PrintValueComma(batteryMonitor.getData());
@@ -367,8 +353,8 @@ void sendSerialTelemetry() {
     for (byte motor = FRONT; motor < LASTMOTOR; motor++) {
       PrintValueComma(motors.getMotorCommand(motor));
     }
-    for (byte axis = ROLL; axis < LASTAXIS; axis++) {
-      PrintValueComma(accel.getFlightData(axis));
+    for (byte axis = XAXIS; axis < LASTAXIS; axis++) {
+      PrintValueComma(accel.getData(axis));
     }
     Serial.print(armed, BIN);
     comma();
@@ -376,11 +362,7 @@ void sendSerialTelemetry() {
       PrintValueComma(2000);
     if (flightMode == ACRO)
       PrintValueComma(1000);
-    #ifdef HeadingMagHold
-      PrintValueComma(compass.getAbsoluteHeading());
-    #else
-      PrintValueComma(0);
-    #endif
+    PrintValueComma(float(RAD_2_DEG(kinematics.getAttitude(YAW))));  // jihlein: remove float(RAD_2_DEG()) when configurator is updated to accept radians as input, displayed as degrees
     #ifdef AltitudeHold
       PrintValueComma(altitude.getData());
       Serial.print(altitudeHold, DEC);
@@ -438,15 +420,15 @@ void sendSerialTelemetry() {
     PrintValueComma(0);
 #elif defined(AeroQuadMega_v1)
     PrintValueComma(1);
-#elif defined(AeroQuad_v18)
+#elif defined(AEROQUAD_V18)
     PrintValueComma(2);
-#elif defined(AeroQuadMega_v2)
+#elif defined(AEROQUAD_MEGA_V2)
     PrintValueComma(3);
-#elif defined(AeroQuad_Wii)
+#elif defined(AEROQUAD_WII)
     PrintValueComma(4);
 #elif defined(AeroQuadMega_Wii)
     PrintValueComma(5);
-#elif defined(ArduCopter)
+#elif defined(APM)
     PrintValueComma(6);
 #elif defined(Multipilot)
     PrintValueComma(7);
@@ -475,7 +457,7 @@ void sendSerialTelemetry() {
     queryType = 'X';
     break;
   case 'g': // Send magnetometer cal values
-#ifdef HeadingMagHold
+#ifdef COMPASS_INSTALLED
     Serial.print(compass.getMagMax(XAXIS), 2);
     comma();
     Serial.print(compass.getMagMin(XAXIS), 2);
