@@ -26,8 +26,8 @@
 // Flight Software Version
 #define VERSION 2.3
 
-//#define BAUD 115200
-#define BAUD 111111 // use this to be compatible with USB and XBee connections
+#define BAUD 115200
+//#define BAUD 111111 // use this to be compatible with USB and XBee connections
 //#define BAUD 57600
 #define LEDPIN 13
 #define ON 1
@@ -348,10 +348,13 @@ byte testSignal = LOW;
 #define GYRO_ROLL_ZERO_ADR 372
 #define GYRO_PITCH_ZERO_ADR 376
 #define GYRO_YAW_ZERO_ADR 380
+#define RX_LOSS_OF_SIGNAL_ADR 384 // needs 8 channels x int (2 byte) -> 16 bytes, 384->399
 
 float arctan2(float y, float x); // defined in Sensors.pde
 float readFloat(int address); // defined in DataStorage.h
 void writeFloat(float value, int address); // defined in DataStorage.h
+int readInt(int address); // defined in DataStorage.h
+void writeInt(int value, int address); // defined in DataStorage.h
 void readEEPROM(void); // defined in DataStorage.h
 void readPilotCommands(void); // defined in FlightCommand.pde
 void readSensors(void); // defined in Sensors.pde

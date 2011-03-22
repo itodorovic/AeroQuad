@@ -31,6 +31,7 @@ public:
   float transmitterSmooth[LASTCHANNEL];
   float mTransmitter[LASTCHANNEL];
   float bTransmitter[LASTCHANNEL];
+  int rxLossOfSignal[LASTCHANNEL];
   //unsigned long currentTime, previousTime;
 
   Receiver(void) {
@@ -65,6 +66,9 @@ public:
       mTransmitter[channel] = readFloat(offset+0);
       bTransmitter[channel] = readFloat(offset+4);
       transmitterSmooth[channel] = readFloat(offset+8);
+	  // Rx loss of signal values, see:
+	  // http://aeroquad.com/showthread.php?2215-RX-loss-of-signal-loss-of-superstable-quad/
+      rxLossOfSignal[channel] = readInt(RX_LOSS_OF_SIGNAL_ADR + 2 * channel);
     }
   }
 
@@ -141,6 +145,14 @@ public:
 
   void setTransmitterOffset(byte channel, float value) {
     bTransmitter[channel] = value;
+  }
+
+  const int getRxLossOfSignal(byte channel) {
+    return rxLossOfSignal[channel];
+  }
+
+  void setRxLossOfSignal(byte channel, int value) {
+    rxLossOfSignal[channel] = value;
   }
 
   const float getAngle(byte channel) {

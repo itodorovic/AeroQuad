@@ -44,6 +44,28 @@ void writeFloat(float value, int address) {
     EEPROM.write(address + i, floatIn.floatByte[i]);
 }
 
+int readInt(int address) {
+  union intStore {
+    byte intByte[2];
+    int intVal;
+  } intOut;
+
+  for (int i = 0; i < 2; i++)
+    intOut.intByte[i] = EEPROM.read(address + i);
+  return intOut.intVal;
+}
+
+void writeInt(int value, int address) {
+  union intStore {
+    byte intByte[2];
+    int intVal;
+  } intIn;
+
+  intIn.intVal = value;
+  for (int i = 0; i < 2; i++)
+    EEPROM.write(address + i, intIn.intByte[i]);
+}
+
 void readPID(unsigned char IDPid, unsigned int IDEeprom) {
   struct PIDdata* pid = &PID[IDPid];
   pid->P = readFloat(IDEeprom);
@@ -116,6 +138,7 @@ void initializeEEPROM(void) {
     receiver.setTransmitterSlope(channel, 1.0);
     receiver.setTransmitterOffset(channel, 0.0);
     receiver.setSmoothFactor(channel, 1.0);
+	receiver.setRxLossOfSignal(channel, 17);
   }
   receiver.setSmoothFactor(YAW, 0.5);
 
@@ -234,6 +257,7 @@ void writeEEPROM(void){
     writeFloat(receiver.getTransmitterSlope(channel),  offset+0);
     writeFloat(receiver.getTransmitterOffset(channel), offset+4);
     writeFloat(receiver.getSmoothFactor(channel),      offset+8);
+    writeInt(receiver.getRxLossOfSignal(channel), RX_LOSS_OF_SIGNAL_ADR + 2 * channel);
   }
 
   writeFloat(smoothHeading, HEADINGSMOOTH_ADR);
@@ -242,7 +266,7 @@ void writeEEPROM(void){
   writeFloat(headingHoldConfig, HEADINGHOLD_ADR);
   writeFloat(minAcro, MINACRO_ADR);
   writeFloat(accel.getOneG(), ACCEL1G_ADR);
-    
+
   /*#ifdef Camera
   writeFloat(mCameraPitch, MCAMERAPITCH_ADR);
   writeFloat(mCameraRoll, MCAMERAROLL_ADR);
@@ -257,6 +281,6 @@ void writeEEPROM(void){
   writeFloat(servoMaxRoll, SERVOMAXROLL_ADR);
   writeFloat(servoMaxYaw, SERVOMAXYAW_ADR);
   #endif*/
-  
+ 
   sei(); // Restart interrupts
 }
